@@ -5,7 +5,7 @@ app = FastAPI()
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "This backend was written on FastAPI by Akim Malyschik"}
 
 
 @app.get("/hello/{name}")
