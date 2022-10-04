@@ -14,3 +14,6 @@ uvicorn==0.18.3
 uvloop==0.17.0
 watchfiles==0.17.0
 websockets==10.3
+sqlalchemy==1.4.41
+asyncpg==0.26.0
+fastapi-users-db-sqlalchemy==4.0.3
