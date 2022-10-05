@@ -1,7 +1,11 @@
+import os
+import zpp_serpent
 from fastapi import Depends, FastAPI
+from crypto.ecc import scalar_mult
+from crypto.ecdh import make_keypair
 from src.db import User, create_db_and_tables, get_async_session
-from src.schemas import UserCreate, UserRead, UserUpdate, Note
-from src.service import NoteService
+from src.schemas import UserCreate, UserRead, UserUpdate, Note, Key
+from src.service import NoteService, UserService
 from src.users import auth_backend, current_active_user, fastapi_users
 
 app = FastAPI()
@@ -36,32 +40,55 @@ async def authenticated_route(user: User = Depends(current_active_user)):
     return {"message": f"Hello {user.email}!"}
 
 
+@app.get("/get_public_key")
+async def exchange_public_keys(alice_public_key: Key, user: User = Depends(current_active_user),
+                               session=Depends(get_async_session)):
+    await UserService.save_public_key(session, user.id, alice_public_key)
+    return {"public_key": os.getenv("public_key")}
+
+
 @app.post("/create_note")
 async def create_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
-    created_note = await NoteService.create_note(session, user.id, note)
-    return {"message": created_note}
+    note_name, note_message = note.name, note.message
+    note.name, note.message = await NoteService.decrypt_note(user, note)
+    await NoteService.create_note(session, user.id, note)
+    note.name, note.message = note_name, note_message
+    return {"message": note}
 
 
 @app.get("/get_notes")
 async def get_notes(user: User = Depends(current_active_user), session=Depends(get_async_session)):
     notes = await NoteService.get_user_notes(session, user.id)
+    shared_secret = scalar_mult(int(os.getenv('private_key')), eval(user.public_key))
+    password = shared_secret[0].to_bytes(32, 'big')
+    for note in notes:
+        note.name = str(zpp_serpent.encrypt_CFB(note.name.encode(), password))
+        note.message = str(zpp_serpent.encrypt_CFB(note.message.encode(), password))
     return {"message": notes}
 
 
-@app.post("/edit_note/{note_id}")
-async def edit_note(note_id: int, note: Note, user: User = Depends(current_active_user),
+@app.post("/edit_note")
+async def edit_note(note: Note, user: User = Depends(current_active_user),
                     session=Depends(get_async_session)):
-    updated_note = await NoteService.update_note(session, note_id, note, user.id)
-    return {"message": updated_note}
+    note_name, note_message = note.name, note.message
+    note.name, note.message = await NoteService.decrypt_note(user, note)
+    await NoteService.update_note(session, note.name, note.message, user.id)
+    note.name, note.message = note_name, note_message
+    return {"message": note}
 
 
-@app.delete("/delete_note/{note_id}")
-async def create_note(note_id: int, user: User = Depends(current_active_user), session=Depends(get_async_session)):
-    deleted_note = await NoteService.delete_note(session, user.id, note_id)
+@app.delete("/delete_note")
+async def delete_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
+    note.name, note.message = await NoteService.decrypt_note(user, note)
+    deleted_note = await NoteService.delete_note(session, user.id, note)
     return {"message": deleted_note}
 
 
 @app.on_event("startup")
 async def on_startup():
-    # Not needed if you set up a migration system like Alembic
+    if 'private_key' not in os.environ:
+        bob_private_key, bob_public_key = make_keypair()
+        os.environ['private_key'] = str(bob_private_key)
+        os.environ['public_key'] = str(bob_public_key)
+
     await create_db_and_tables()

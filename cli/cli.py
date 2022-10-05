@@ -3,8 +3,9 @@ import requests
 import sys
 from crypto import ecdh
 from crypto.ecc import scalar_mult
+from utils import report_success, encrypt_note, decrypt_note
 
-ADDRESS = 'http://localhost:8000/'  # 'https://super-safe-evernote-backend.herokuapp.com/'
+ADDRESS = 'https://super-safe-evernote-backend.herokuapp.com/'
 
 users = {}
 current_username = None
@@ -21,45 +22,38 @@ class User:
         users[self.username] = self
 
 
-def report_success(response, expected_code=200):
-    ok = response.status_code == expected_code
-    print('Successful' if ok else 'Failed')
-    return ok
-
-
 def register(args):
     user = User(args.username)
     response = requests.post(ADDRESS + 'auth/register',
-                             headers={
-                                 'alice_public_key': user.public_key
-                             },
                              json={
                                  'email': args.username + '@example.com',
                                  'password': args.password
                              })
 
-    if report_success(response, 201):
-        bob_public_key = response.headers['bob_public_key']
-        user.shared_secret = scalar_mult(user.private_key, bob_public_key)
+    report_success(response, 201)
 
 
 def login(args):
     global current_username
-    user = users[args.username]
-    headers = {'alice_public_key': user.public_key} if user.shared_secret is None else {}
-
     response = requests.post(ADDRESS + 'auth/jwt/login',
                              data={
                                  'username': args.username + '@example.com',
                                  'password': args.password
-                             },
-                             headers=headers)
+                             })
+    if args.username not in users:
+        users[args.username] = User(args.username, response.json()['access_token'])
+
+    current_username = args.username
+    report_success(response)
+
+
+def handshake(args=None):
+    user = users[current_username]
+    response = requests.get(ADDRESS + 'get_public_key',
+                            json={'public_key': str(user.public_key)},
+                            headers={'Authorization': f'Bearer {user.jwt}'})
     if report_success(response):
-        bob_public_key = response.headers['bob_public_key']
-        user.shared_secret = scalar_mult(user.private_key, bob_public_key)
-    user.jwt = response.json()['access_token']
-    current_username = user.username
-    get_notes()
+        user.shared_secret = scalar_mult(user.private_key, eval(response.json()['public_key']))
 
 
 def get_notes(args=None):
@@ -67,52 +61,64 @@ def get_notes(args=None):
     response = requests.get(ADDRESS + 'get_notes',
                             headers={'Authorization': f'Bearer {user.jwt}'})
     for note in response.json()['message']:
-        user.notes[note['name']] = (note['id'], note['message'])
+        name, content = decrypt_note(user, note['name'], note['message'])
+        user.notes[name] = content
     print('Available notes:', ', '.join(user.notes))
 
 
 def create(args):
     user = users[current_username]
+    name, content = encrypt_note(user, args.note_name, args.content)
+
     response = requests.post(ADDRESS + 'create_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
-                                 'name': args.note_name,
-                                 'message': args.content
+                                 'name': name,
+                                 'message': content
                              })
     if report_success(response):
         note = response.json()['message']
-        user.notes[note['name']] = (note['id'], note['message'])
+        name, content = decrypt_note(user, note['name'], note['message'])
+        user.notes[name] = content
 
 
 def edit(args):
     user = users[current_username]
-    response = requests.post(ADDRESS + 'edit_note/' + str(user.notes[args.note_name][0]),
+    name, content = encrypt_note(user, args.note_name, args.content)
+    response = requests.post(ADDRESS + 'edit_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
-                                 'name': args.note_name,
-                                 'message': args.content
+                                 'name': name,
+                                 'message': content
                              })
     if report_success(response):
         note = response.json()['message']
-        user.notes[note['name']] = (note['id'], note['message'])
+        name, content = decrypt_note(user, note['name'], note['message'])
+        user.notes[name] = content
 
 
 def delete(args):
     user = users[current_username]
-    response = requests.delete(ADDRESS + 'delete_note/' + str(user.notes[args.note_name][0]),
-                               headers={'Authorization': f'Bearer {user.jwt}'})
+    name, content = encrypt_note(user, args.note_name, user.notes[args.note_name])
+    response = requests.delete(ADDRESS + 'delete_note',
+                               headers={'Authorization': f'Bearer {user.jwt}'},
+                               json={
+                                   'name': name,
+                                   'message': content
+                               })
     if report_success(response):
         del user.notes[args.note_name]
 
 
 def print_p(args):
     user = users[current_username]
-    print(user.notes[args.note_name][1])
+    print(user.notes[args.note_name])
 
 
 COMMANDS = {
     'register': (argparse.ArgumentParser(prog='register'), register),
     'login': (argparse.ArgumentParser(prog='login'), login),
+    'handshake': (argparse.ArgumentParser(prog='handshake'), handshake),
     'create': (argparse.ArgumentParser(prog='create'), create),
     'edit': (argparse.ArgumentParser(prog='edit'), edit),
     'get': (argparse.ArgumentParser(prog='get'), get_notes),

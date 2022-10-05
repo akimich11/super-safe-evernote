@@ -8,6 +8,10 @@ class Note(BaseModel):
     message: constr(min_length=1)
 
 
+class Key(BaseModel):
+    public_key: str
+
+
 class UserRead(schemas.BaseUser[uuid.UUID]):
     pass
 

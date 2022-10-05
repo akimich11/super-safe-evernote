@@ -18,3 +18,4 @@ class Note(Base):
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     notes = relationship(Note, backref="user")
+    public_key = Column(String)
