@@ -1,11 +1,12 @@
 import argparse
+import os
 import requests
 import sys
 from crypto import ecdh
 from crypto.ecc import scalar_mult
 from utils import report_success, encrypt_note, decrypt_note
 
-ADDRESS = 'https://super-safe-evernote-backend.herokuapp.com/'
+ADDRESS = os.getenv('BACKEND_URL', 'https://super-safe-evernote-backend.herokuapp.com/')
 
 users = {}
 current_username = None
@@ -23,7 +24,7 @@ class User:
 
 
 def register(args):
-    user = User(args.username)
+    User(args.username)
     response = requests.post(ADDRESS + 'auth/register',
                              json={
                                  'email': args.username + '@example.com',
@@ -60,10 +61,11 @@ def get_notes(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_notes',
                             headers={'Authorization': f'Bearer {user.jwt}'})
-    for note in response.json()['message']:
-        name, content = decrypt_note(user, note['name'], note['message'])
-        user.notes[name] = content
-    print('Available notes:', ', '.join(user.notes))
+    if report_success(response):
+        for note in response.json()['message']:
+            name, content = decrypt_note(user, note['name'], note['message'])
+            user.notes[name] = content
+        print('Available notes:', ', '.join(user.notes))
 
 
 def create(args):

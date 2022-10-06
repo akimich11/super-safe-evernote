@@ -18,5 +18,8 @@ def decrypt_note(user, name, content):
 
 def report_success(response, expected_code=200):
     ok = response.status_code == expected_code
-    print('Successful' if ok else 'Failed')
+    if 'message' in response.json() and response.json()['message'] == 'ECDH error':
+        print('ECDH error')
+    else:
+        print('Successful' if ok else 'Failed')
     return ok

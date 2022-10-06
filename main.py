@@ -50,9 +50,12 @@ async def exchange_public_keys(alice_public_key: Key, user: User = Depends(curre
 @app.post("/create_note")
 async def create_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
     note_name, note_message = note.name, note.message
-    note.name, note.message = await NoteService.decrypt_note(user, note)
-    await NoteService.create_note(session, user.id, note)
-    note.name, note.message = note_name, note_message
+    try:
+        note.name, note.message = await NoteService.decrypt_note(user, note)
+        await NoteService.create_note(session, user.id, note)
+        note.name, note.message = note_name, note_message
+    except BaseException:
+        return {"message": "ECDH error"}
     return {"message": note}
 
 
@@ -61,26 +64,35 @@ async def get_notes(user: User = Depends(current_active_user), session=Depends(g
     notes = await NoteService.get_user_notes(session, user.id)
     shared_secret = scalar_mult(int(os.getenv('private_key')), eval(user.public_key))
     password = shared_secret[0].to_bytes(32, 'big')
-    for note in notes:
-        note.name = str(zpp_serpent.encrypt_CFB(note.name.encode(), password))
-        note.message = str(zpp_serpent.encrypt_CFB(note.message.encode(), password))
+    try:
+        for note in notes:
+            note.name = str(zpp_serpent.encrypt_CFB(note.name.encode(), password))
+            note.message = str(zpp_serpent.encrypt_CFB(note.message.encode(), password))
+    except BaseException:
+        return {"message": "ECDH error"}
     return {"message": notes}
 
 
 @app.post("/edit_note")
 async def edit_note(note: Note, user: User = Depends(current_active_user),
                     session=Depends(get_async_session)):
-    note_name, note_message = note.name, note.message
-    note.name, note.message = await NoteService.decrypt_note(user, note)
-    await NoteService.update_note(session, note.name, note.message, user.id)
-    note.name, note.message = note_name, note_message
+    try:
+        note_name, note_message = note.name, note.message
+        note.name, note.message = await NoteService.decrypt_note(user, note)
+        await NoteService.update_note(session, note.name, note.message, user.id)
+        note.name, note.message = note_name, note_message
+    except BaseException:
+        return {"message": "ECDH error"}
     return {"message": note}
 
 
 @app.delete("/delete_note")
 async def delete_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
-    note.name, note.message = await NoteService.decrypt_note(user, note)
-    deleted_note = await NoteService.delete_note(session, user.id, note)
+    try:
+        note.name, note.message = await NoteService.decrypt_note(user, note)
+        deleted_note = await NoteService.delete_note(session, user.id, note)
+    except BaseException:
+        return {"message": "ECDH error"}
     return {"message": deleted_note}
 
 
@@ -90,5 +102,6 @@ async def on_startup():
         bob_private_key, bob_public_key = make_keypair()
         os.environ['private_key'] = str(bob_private_key)
         os.environ['public_key'] = str(bob_public_key)
+        print('keys were created')
 
     await create_db_and_tables()
