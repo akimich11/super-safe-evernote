@@ -112,7 +112,7 @@ def delete(args):
 
 def print_p(args):
     user = users[current_username]
-    print(user.notes[args.note_name])
+    print(user.notes.get(args.note_name, 'Error: no note with this name'))
 
 
 COMMANDS = {

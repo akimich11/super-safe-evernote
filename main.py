@@ -54,7 +54,8 @@ async def create_note(note: Note, user: User = Depends(current_active_user), ses
         note.name, note.message = await NoteService.decrypt_note(user, note)
         await NoteService.create_note(session, user.id, note)
         note.name, note.message = note_name, note_message
-    except BaseException:
+    except BaseException as e:
+        print(e)
         return {"message": "ECDH error"}
     return {"message": note}
 

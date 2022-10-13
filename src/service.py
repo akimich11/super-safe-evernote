@@ -30,7 +30,13 @@ class NoteService:
     @staticmethod
     async def create_note(session: AsyncSession, user_id: UUID, note: schemas.Note):
         user = await session.get(models.User, {'id': user_id})
+        db_password = int(os.getenv('private_key')).to_bytes(32, 'big')
         note = models.Note(
+            user_id=user.id,
+            name=note.name,
+            message=str(zpp_serpent.encrypt_CFB(note.message.encode(), db_password))
+        )
+        decrypted_note = models.Note(
             user_id=user.id,
             name=note.name,
             message=note.message
@@ -38,13 +44,16 @@ class NoteService:
         session.add(note)
         await session.commit()
         await session.refresh(note)
-        return note
+        return decrypted_note
 
     @staticmethod
     async def get_user_notes(session: AsyncSession, user_id: UUID):
         stmt = select(models.User).where(models.User.id == user_id).options(selectinload(models.User.notes))
         result = await session.execute(stmt)
         user = result.scalars().one()
+        db_password = int(os.getenv('private_key')).to_bytes(32, 'big')
+        for note in user.notes:
+            note.message = zpp_serpent.decrypt_CFB(eval(note.message), db_password).decode()
         return user.notes
 
     @staticmethod
@@ -55,11 +64,16 @@ class NoteService:
 
         if note_from_db.user_id != user_id:
             return "This is not your note, you can't edit it"
-        note_from_db.message = note_message
+        db_password = int(os.getenv('private_key')).to_bytes(32, 'big')
+        note_from_db.message = str(zpp_serpent.encrypt_CFB(note_message.encode(), db_password))
 
         await session.commit()
         await session.refresh(note_from_db)
-        return note_from_db
+        return models.Note(
+            user_id=user_id,
+            name=note_name,
+            message=note_message
+        )
 
     @staticmethod
     async def delete_note(session, user_id, note):

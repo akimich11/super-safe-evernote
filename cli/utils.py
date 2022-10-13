@@ -20,6 +20,7 @@ def report_success(response, expected_code=200):
     ok = response.status_code == expected_code
     if 'message' in response.json() and response.json()['message'] == 'ECDH error':
         print('ECDH error')
+        return False
     else:
         print('Successful' if ok else 'Failed')
     return ok
