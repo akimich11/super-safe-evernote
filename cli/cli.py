@@ -1,6 +1,7 @@
 import argparse
 import os
 import requests
+import shlex
 import sys
 from crypto import ecdh
 from crypto.ecc import scalar_mult
@@ -20,11 +21,9 @@ class User:
         self.jwt = jwt
         self.notes = {}
         self.username = username
-        users[self.username] = self
 
 
 def register(args):
-    User(args.username)
     response = requests.post(ADDRESS + 'auth/register',
                              json={
                                  'email': args.username + '@example.com',
@@ -41,8 +40,7 @@ def login(args):
                                  'username': args.username + '@example.com',
                                  'password': args.password
                              })
-    if args.username not in users:
-        users[args.username] = User(args.username, response.json()['access_token'])
+    users[args.username] = User(args.username, response.json()['access_token'])
 
     current_username = args.username
     report_success(response)
@@ -114,19 +112,19 @@ def delete(args):
 
 def print_p(args):
     user = users[current_username]
-    print(user.notes[args.note_name])
+    print(user.notes.get(args.note_name, 'Error: no note with this name'))
 
 
 COMMANDS = {
-    'register': (argparse.ArgumentParser(prog='register'), register),
-    'login': (argparse.ArgumentParser(prog='login'), login),
-    'handshake': (argparse.ArgumentParser(prog='handshake'), handshake),
-    'create': (argparse.ArgumentParser(prog='create'), create),
-    'edit': (argparse.ArgumentParser(prog='edit'), edit),
-    'get': (argparse.ArgumentParser(prog='get'), get_notes),
-    'print': (argparse.ArgumentParser(prog='print'), print_p),
-    'delete': (argparse.ArgumentParser(prog='delete'), delete),
-    'exit': (argparse.ArgumentParser(prog='exit'), lambda _: sys.exit(0)),
+    'register': (argparse.ArgumentParser(prog='register', exit_on_error=False), register),
+    'login': (argparse.ArgumentParser(prog='login', exit_on_error=False), login),
+    'handshake': (argparse.ArgumentParser(prog='handshake', exit_on_error=False), handshake),
+    'create': (argparse.ArgumentParser(prog='create', exit_on_error=False), create),
+    'edit': (argparse.ArgumentParser(prog='edit', exit_on_error=False), edit),
+    'get': (argparse.ArgumentParser(prog='get', exit_on_error=False), get_notes),
+    'print': (argparse.ArgumentParser(prog='print', exit_on_error=False), print_p),
+    'delete': (argparse.ArgumentParser(prog='delete', exit_on_error=False), delete),
+    'exit': (argparse.ArgumentParser(prog='exit', exit_on_error=False), lambda _: sys.exit(0)),
 }
 
 
@@ -158,13 +156,17 @@ def main():
     make_commands()
     while True:
         print('>>> ', end='')
-        command = input().split(' ')
+        command = shlex.split(input())
         if command[0] not in COMMANDS:
             print('Available commands:', *COMMANDS.keys())
             continue
 
         parser, callback = COMMANDS[command[0]]
-        callback(parser.parse_args(command[1:]))
+        try:
+            args = parser.parse_args(command[1:])
+        except SystemExit:
+            continue
+        callback(args)
 
 
 if __name__ == '__main__':
