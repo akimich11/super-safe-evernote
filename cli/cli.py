@@ -8,6 +8,9 @@ from crypto.ecc import scalar_mult
 from utils import report_success, encrypt_note, decrypt_note
 
 ADDRESS = os.getenv('BACKEND_URL', 'https://super-safe-evernote-backend.herokuapp.com/')
+PROXY = {
+    'http': 'http://localhost:8080',
+}
 
 users = {}
 current_username = None
@@ -21,11 +24,6 @@ class User:
         self.jwt = jwt
         self.notes = {}
         self.username = username
-
-
-PROXY = {
-    'http': 'http://localhost:8080',
-}
 
 
 def register(args):
@@ -47,6 +45,7 @@ def login(args):
                                  'password': args.password
                              },
                              proxies=PROXY)
+
     users[args.username] = User(args.username, response.json()['access_token'])
 
     current_username = args.username
@@ -78,7 +77,6 @@ def get_notes(args=None):
 
 def create(args):
     user = users[current_username]
-    print(user.shared_secret[0])
     name, content = encrypt_note(user.shared_secret[0], args.note_name, args.content)
 
     response = requests.post(ADDRESS + 'create_note',
