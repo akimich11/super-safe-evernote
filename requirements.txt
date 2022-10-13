@@ -19,3 +19,4 @@ asyncpg==0.26.0
 fastapi-users-db-sqlalchemy==4.0.3
 zpp_serpent==2.2.1
 bitstring==3.1.9
+requests
