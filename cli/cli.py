@@ -5,9 +5,9 @@ import shlex
 import sys
 from crypto import ecdh
 from crypto.ecc import scalar_mult
+from src.settings import ADDRESS, MITM_PROXY
 from utils import report_success, encrypt_note, decrypt_note
 
-ADDRESS = os.getenv('BACKEND_URL', 'https://super-safe-evernote-backend.herokuapp.com/')
 
 users = {}
 current_username = None
@@ -28,7 +28,8 @@ def register(args):
                              json={
                                  'email': args.username + '@example.com',
                                  'password': args.password
-                             })
+                             },
+                             proxies=MITM_PROXY)
 
     report_success(response, 201)
 
@@ -39,73 +40,92 @@ def login(args):
                              data={
                                  'username': args.username + '@example.com',
                                  'password': args.password
-                             })
+                             },
+                             proxies=MITM_PROXY)
+
     users[args.username] = User(args.username, response.json()['access_token'])
 
     current_username = args.username
     report_success(response)
+    handshake()
 
 
 def handshake(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_public_key',
                             json={'public_key': str(user.public_key)},
-                            headers={'Authorization': f'Bearer {user.jwt}'})
+                            headers={'Authorization': f'Bearer {user.jwt}'},
+                            proxies=MITM_PROXY)
     if report_success(response):
         user.shared_secret = scalar_mult(user.private_key, eval(response.json()['public_key']))
+
+
+def check_response(response, func, args, expected_code=200):
+    if response.status_code == expected_code and response.json()['message'] is not None and 'handshake required' in \
+            response.json()['message']:
+        handshake()
+        func(args)
 
 
 def get_notes(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_notes',
-                            headers={'Authorization': f'Bearer {user.jwt}'})
+                            headers={'Authorization': f'Bearer {user.jwt}'},
+                            proxies=MITM_PROXY)
+    check_response(response, get_notes, args)
     if report_success(response):
         for note in response.json()['message']:
-            name, content = decrypt_note(user, note['name'], note['message'])
+            name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
             user.notes[name] = content
         print('Available notes:', ', '.join(user.notes))
 
 
 def create(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, args.content)
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, args.content)
 
     response = requests.post(ADDRESS + 'create_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
                                  'name': name,
                                  'message': content
-                             })
+                             },
+                             proxies=MITM_PROXY)
+    check_response(response, create, args)
     if report_success(response):
         note = response.json()['message']
-        name, content = decrypt_note(user, note['name'], note['message'])
+        name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
         user.notes[name] = content
 
 
 def edit(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, args.content)
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, args.content)
     response = requests.post(ADDRESS + 'edit_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
                                  'name': name,
                                  'message': content
-                             })
+                             },
+                             proxies=MITM_PROXY)
+    check_response(response, edit, args)
     if report_success(response):
         note = response.json()['message']
-        name, content = decrypt_note(user, note['name'], note['message'])
+        name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
         user.notes[name] = content
 
 
 def delete(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, user.notes[args.note_name])
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, user.notes[args.note_name])
     response = requests.delete(ADDRESS + 'delete_note',
                                headers={'Authorization': f'Bearer {user.jwt}'},
                                json={
                                    'name': name,
                                    'message': content
-                               })
+                               },
+                               proxies=MITM_PROXY)
+    check_response(response, delete, args)
     if report_success(response):
         del user.notes[args.note_name]
 
