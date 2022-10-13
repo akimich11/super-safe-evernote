@@ -23,12 +23,18 @@ class User:
         self.username = username
 
 
+PROXY = {
+    'http': 'http://localhost:8080',
+}
+
+
 def register(args):
     response = requests.post(ADDRESS + 'auth/register',
                              json={
                                  'email': args.username + '@example.com',
                                  'password': args.password
-                             })
+                             },
+                             proxies=PROXY)
 
     report_success(response, 201)
 
@@ -39,18 +45,21 @@ def login(args):
                              data={
                                  'username': args.username + '@example.com',
                                  'password': args.password
-                             })
+                             },
+                             proxies=PROXY)
     users[args.username] = User(args.username, response.json()['access_token'])
 
     current_username = args.username
     report_success(response)
+    handshake()
 
 
 def handshake(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_public_key',
                             json={'public_key': str(user.public_key)},
-                            headers={'Authorization': f'Bearer {user.jwt}'})
+                            headers={'Authorization': f'Bearer {user.jwt}'},
+                            proxies=PROXY)
     if report_success(response):
         user.shared_secret = scalar_mult(user.private_key, eval(response.json()['public_key']))
 
@@ -58,54 +67,59 @@ def handshake(args=None):
 def get_notes(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_notes',
-                            headers={'Authorization': f'Bearer {user.jwt}'})
+                            headers={'Authorization': f'Bearer {user.jwt}'},
+                            proxies=PROXY)
     if report_success(response):
         for note in response.json()['message']:
-            name, content = decrypt_note(user, note['name'], note['message'])
+            name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
             user.notes[name] = content
         print('Available notes:', ', '.join(user.notes))
 
 
 def create(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, args.content)
+    print(user.shared_secret[0])
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, args.content)
 
     response = requests.post(ADDRESS + 'create_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
                                  'name': name,
                                  'message': content
-                             })
+                             },
+                             proxies=PROXY)
     if report_success(response):
         note = response.json()['message']
-        name, content = decrypt_note(user, note['name'], note['message'])
+        name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
         user.notes[name] = content
 
 
 def edit(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, args.content)
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, args.content)
     response = requests.post(ADDRESS + 'edit_note',
                              headers={'Authorization': f'Bearer {user.jwt}'},
                              json={
                                  'name': name,
                                  'message': content
-                             })
+                             },
+                             proxies=PROXY)
     if report_success(response):
         note = response.json()['message']
-        name, content = decrypt_note(user, note['name'], note['message'])
+        name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
         user.notes[name] = content
 
 
 def delete(args):
     user = users[current_username]
-    name, content = encrypt_note(user, args.note_name, user.notes[args.note_name])
+    name, content = encrypt_note(user.shared_secret[0], args.note_name, user.notes[args.note_name])
     response = requests.delete(ADDRESS + 'delete_note',
                                headers={'Authorization': f'Bearer {user.jwt}'},
                                json={
                                    'name': name,
                                    'message': content
-                               })
+                               },
+                               proxies=PROXY)
     if report_success(response):
         del user.notes[args.note_name]
 
