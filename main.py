@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+
 import zpp_serpent
 from fastapi import Depends, FastAPI
 from crypto.ecc import scalar_mult
@@ -49,6 +51,8 @@ async def exchange_public_keys(alice_public_key: Key, user: User = Depends(curre
 
 @app.post("/create_note")
 async def create_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
+    if (datetime.now() - user.pk_updated_at).seconds > 3600:
+        return {"message": "handshake required"}
     note_name, note_message = note.name, note.message
     try:
         note.name, note.message = await NoteService.decrypt_note(user, note)
@@ -62,6 +66,8 @@ async def create_note(note: Note, user: User = Depends(current_active_user), ses
 
 @app.get("/get_notes")
 async def get_notes(user: User = Depends(current_active_user), session=Depends(get_async_session)):
+    if (datetime.now() - user.pk_updated_at).seconds > 3600:
+        return {"message": "handshake required"}
     notes = await NoteService.get_user_notes(session, user.id)
     shared_secret = scalar_mult(int(os.getenv('private_key')), eval(user.public_key))
     password = shared_secret[0].to_bytes(32, 'big')
@@ -77,6 +83,8 @@ async def get_notes(user: User = Depends(current_active_user), session=Depends(g
 @app.post("/edit_note")
 async def edit_note(note: Note, user: User = Depends(current_active_user),
                     session=Depends(get_async_session)):
+    if (datetime.now() - user.pk_updated_at).seconds > 3600:
+        return {"message": "handshake required"}
     try:
         note_name, note_message = note.name, note.message
         note.name, note.message = await NoteService.decrypt_note(user, note)
@@ -89,6 +97,8 @@ async def edit_note(note: Note, user: User = Depends(current_active_user),
 
 @app.delete("/delete_note")
 async def delete_note(note: Note, user: User = Depends(current_active_user), session=Depends(get_async_session)):
+    if (datetime.now() - user.pk_updated_at).seconds > 3600:
+        return {"message": "handshake required"}
     try:
         note.name, note.message = await NoteService.decrypt_note(user, note)
         deleted_note = await NoteService.delete_note(session, user.id, note)

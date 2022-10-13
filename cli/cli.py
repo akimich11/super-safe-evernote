@@ -63,11 +63,19 @@ def handshake(args=None):
         user.shared_secret = scalar_mult(user.private_key, eval(response.json()['public_key']))
 
 
+def check_response(response, func, args, expected_code=200):
+    if response.status_code == expected_code and response.json()['message'] is not None and 'handshake required' in \
+            response.json()['message']:
+        handshake()
+        func(args)
+
+
 def get_notes(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_notes',
                             headers={'Authorization': f'Bearer {user.jwt}'},
                             proxies=PROXY)
+    check_response(response, get_notes, args)
     if report_success(response):
         for note in response.json()['message']:
             name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
@@ -86,6 +94,7 @@ def create(args):
                                  'message': content
                              },
                              proxies=PROXY)
+    check_response(response, create, args)
     if report_success(response):
         note = response.json()['message']
         name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
@@ -102,6 +111,7 @@ def edit(args):
                                  'message': content
                              },
                              proxies=PROXY)
+    check_response(response, edit, args)
     if report_success(response):
         note = response.json()['message']
         name, content = decrypt_note(user.shared_secret[0], note['name'], note['message'])
@@ -118,6 +128,7 @@ def delete(args):
                                    'message': content
                                },
                                proxies=PROXY)
+    check_response(response, delete, args)
     if report_success(response):
         del user.notes[args.note_name]
 

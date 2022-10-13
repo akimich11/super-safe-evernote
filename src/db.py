@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from src.models import Base, User
 
 
-DATABASE_URL = os.environ.get('POSTGRES_URL', "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres")
+DATABASE_URL = os.environ.get('POSTGRES_URL', "postgresql+asyncpg://postgres:postgres@localhost:5432/evernote")
 
 
 engine = create_async_engine(DATABASE_URL)
