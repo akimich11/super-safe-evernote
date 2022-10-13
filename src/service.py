@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from uuid import UUID
 import zpp_serpent
 from sqlalchemy import select
@@ -13,6 +14,7 @@ class UserService:
     async def save_public_key(session: AsyncSession, user_id: UUID, key: schemas.Key):
         user = await session.get(models.User, {'id': user_id})
         user.public_key = key.public_key
+        user.pk_updated_at = datetime.now()
         await session.commit()
         await session.refresh(user)
         return user

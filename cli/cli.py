@@ -5,12 +5,9 @@ import shlex
 import sys
 from crypto import ecdh
 from crypto.ecc import scalar_mult
+from src.settings import ADDRESS, MITM_PROXY
 from utils import report_success, encrypt_note, decrypt_note
 
-ADDRESS = os.getenv('BACKEND_URL', 'https://super-safe-evernote-backend.herokuapp.com/')
-PROXY = {
-    'http': 'http://localhost:8080',
-}
 
 users = {}
 current_username = None
@@ -32,7 +29,7 @@ def register(args):
                                  'email': args.username + '@example.com',
                                  'password': args.password
                              },
-                             proxies=PROXY)
+                             proxies=MITM_PROXY)
 
     report_success(response, 201)
 
@@ -44,7 +41,7 @@ def login(args):
                                  'username': args.username + '@example.com',
                                  'password': args.password
                              },
-                             proxies=PROXY)
+                             proxies=MITM_PROXY)
 
     users[args.username] = User(args.username, response.json()['access_token'])
 
@@ -58,7 +55,7 @@ def handshake(args=None):
     response = requests.get(ADDRESS + 'get_public_key',
                             json={'public_key': str(user.public_key)},
                             headers={'Authorization': f'Bearer {user.jwt}'},
-                            proxies=PROXY)
+                            proxies=MITM_PROXY)
     if report_success(response):
         user.shared_secret = scalar_mult(user.private_key, eval(response.json()['public_key']))
 
@@ -74,7 +71,7 @@ def get_notes(args=None):
     user = users[current_username]
     response = requests.get(ADDRESS + 'get_notes',
                             headers={'Authorization': f'Bearer {user.jwt}'},
-                            proxies=PROXY)
+                            proxies=MITM_PROXY)
     check_response(response, get_notes, args)
     if report_success(response):
         for note in response.json()['message']:
@@ -93,7 +90,7 @@ def create(args):
                                  'name': name,
                                  'message': content
                              },
-                             proxies=PROXY)
+                             proxies=MITM_PROXY)
     check_response(response, create, args)
     if report_success(response):
         note = response.json()['message']
@@ -110,7 +107,7 @@ def edit(args):
                                  'name': name,
                                  'message': content
                              },
-                             proxies=PROXY)
+                             proxies=MITM_PROXY)
     check_response(response, edit, args)
     if report_success(response):
         note = response.json()['message']
@@ -127,7 +124,7 @@ def delete(args):
                                    'name': name,
                                    'message': content
                                },
-                               proxies=PROXY)
+                               proxies=MITM_PROXY)
     check_response(response, delete, args)
     if report_success(response):
         del user.notes[args.note_name]
