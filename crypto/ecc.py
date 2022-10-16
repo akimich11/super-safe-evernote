@@ -53,6 +53,23 @@ def inverse_mod(k, p):
     return x % p
 
 
+def sqrt_mod(value, m):
+    for x in range(0, m):
+        if (x ** 2) % m == value:
+            yield x
+
+
+def generate_group(a, b, m):
+    group = []
+
+    for x in range(1, m):
+        value = (x ** 3 + a * x + b) % m
+        for a in sqrt_mod(value, m):
+            group.append(a)
+
+    return set(sorted(group))
+
+
 # Functions that work on curve points #########################################
 
 def is_on_curve(point):
