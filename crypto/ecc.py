@@ -4,19 +4,18 @@ import collections
 EllipticCurve = collections.namedtuple('EllipticCurve', 'name p a b g n h')
 
 curve = EllipticCurve(
-    'secp256k1',
+    'E71(0, 7)',
     # Field characteristic.
-    p=0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f,
+    p=71,
     # Curve coefficients.
     a=0,
     b=7,
-    # Base point.
-    g=(0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
-       0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8),
+    # Base point (you can choose any point from elliptic group)
+    g=(40, 65),
     # Subgroup order.
-    n=0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141,
+    n=7,
     # Subgroup cofactor.
-    h=1,
+    h=10,
 )
 
 
@@ -64,8 +63,9 @@ def generate_group(a, b, m):
 
     for x in range(1, m):
         value = (x ** 3 + a * x + b) % m
-        for a in sqrt_mod(value, m):
-            group.append(a)
+        for y in sqrt_mod(value, m):
+            if y > 0:
+                group.append((x, y))
 
     return set(sorted(group))
 
